@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Uroš Novković.ai</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            touch-action: none;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #010103;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #warpCanvas { z-index: 1; }
+        #zeleniLejerCanvas { z-index: 2; pointer-events: none; }
+        #svemirCanvas { z-index: 3; }
+    </style>
+</head>
+<body>
+    <!-- Tvoj MP3 fajl iz istog foldera -->
+    <audio id="bgMuzika" src="muzika.mp3" loop preload="auto"></audio>
+
+    <canvas id="warpCanvas"></canvas>
+    <canvas id="zeleniLejerCanvas"></canvas>
+    <canvas id="svemirCanvas"></canvas>
+<script>
+    const canvas = document.getElementById('svemirCanvas');
+    const ctx = canvas.getContext('2d');
+    const zeleniCanvas = document.getElementById('zeleniLejerCanvas');
+    const zeleniCtx = zeleniCanvas.getContext('2d');
+    const warpCanvas = document.getElementById('warpCanvas');
+    const warpCtx = warpCanvas.getContext('2d');
+    const audioFajl = document.getElementById('bgMuzika');
+
+    let cestice = [];
+    let bleskovi = [];
+    let zeleneCestice = [];
+    let zeleniBleskovi = [];
+    let warpZvezde = [];
+
+    const tekstIme = "Uroš Novković.ai";
+    const tekstZvezde = "★★★★★";
+    
+    let rotacija = 0;
+    let trenutnaBrzinaRotacije = 6.0; 
+    let ciljnaBrzinaRotacije = 6.0;
+    let trenutniZoom = 1;
+    let ciljniZoom = 1;
+    let tajmerZaFiziku = 0;
+    let vremeDoPromene = 30;
+
+    let prstPritisnut = false;
+    let poslednjiX = 0;
+    let poslednjiY = 0;
+
+    let spektarPrstenaHue = 120; 
+    let smerPrstena = 1;
+    let spektarCesticaHueOffset = 0;
+    let smerCestica = 1;
+    let jacinaPritiskaGlobalna = 0.6;
+
+    let tajmerZaStroboskop = 0;
+    let vremeDoStroboskopa = Math.floor(Math.random() * 180) + 300; 
+    let stroboskopAktivanTriger = false;
+
+    let psihodelicniTajmerBrzine = 0;
+function prilagodiRezoluciju() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    canvas.width = w * 2; canvas.height = h * 2; ctx.scale(2, 2);
+    zeleniCanvas.width = w * 2; zeleniCanvas.height = h * 2; zeleniCtx.scale(2, 2);
+    warpCanvas.width = w * 2; warpCanvas.height = h * 2; warpCtx.scale(2, 2);
+}
+window.addEventListener('resize', prilagodiRezoluciju);
+prilagodiRezoluciju();
+
+const maxWarpZvezda = 150;
+for (let i = 0; i < maxWarpZvezda; i++) {
+    warpZvezde.push({
+        x: (Math.random() - 0.5) * window.innerWidth,
+        y: (Math.random() - 0.5) * window.innerHeight,
+        z: Math.random() * window.innerWidth,
+        boja: Math.random() > 0.5 ? '#00d2ff' : '#bd00ff'
+    });
+}
+
+function stvoriZelenoPrstanje(x, y, jacinaPrsta) {
+let faktorJacine = jacinaPrsta || 0.5;
+if (faktorJacine < 0.2) faktorJacine = 0.5;
+
+let pocetniRadijus = 8 * (faktorJacine * 12); 
+zeleniBleskovi.push({ x: x, y: y, r: pocetniRadijus, alfa: 1 });
+
+let brojCestica = Math.floor(faktorJacine * 35) + 15;
+for (let i = 0; i < brojCestica; i++) {
+    let ugao = Math.random() * Math.PI * 2;
+    let brzina = (Math.random() * 10 + 4) * (faktorJacine * 2);
+    
+    let osnovniZeleniHue = (Math.random() * 15 + 105) + spektarCesticaHueOffset;
+
+    zeleneCestice.push({
+        x: x, y: y,
+        vx: Math.cos(ugao) * brzina,
+        vy: Math.sin(ugao) * brzina,
+        alfa: 1,
+        velicina: (Math.random() * 4 + 1.5) * (faktorJacine * 1.5),
+        slabljenje: Math.random() * 0.025 + 0.015,
+        boja: `hsl(${osnovniZeleniHue}, 100%, 50%)`
+    });
+}
+}
+
+function stvoriEksploziju(customX, customY) {
+let x = customX !== undefined ? customX : Math.random() * window.innerWidth;
+let y = customY !== undefined ? customY : Math.random() * window.innerHeight;
+bleskovi.push({ x: x, y: y, r: 2, alfa: 1 });
+
+let brojCestica = Math.floor(Math.random() * 25) + 15;
+for (let i = 0; i < brojCestica; i++) {
+    let ugao = Math.random() * Math.PI * 2;
+    let brzina = Math.random() * 6 + 1.5;
+    
+    let dinamickiPlaviHue = (195 + spektarCesticaHueOffset) + (Math.random() * 10 - 5);
+
+    cestice.push({
+        x: x, y: y,
+        vx: Math.cos(ugao) * brzina,
+        vy: Math.sin(ugao) * brzina,
+        alfa: 1,
+        velicina: Math.random() * 3 + 0.5,
+        slabljenje: Math.random() * 0.02 + 0.01,
+        boja: `hsl(${dinamickiPlaviHue}, 100%, 50%)`
+    });
+}
+}
+
+function crtajKruzniTekst(centerX, centerY, radius, ime, zvezde, ugaoRotacije, skala) {
+ctx.save();
+ctx.translate(centerX, centerY);
+ctx.scale(skala, skala);
+ctx.rotate(ugaoRotacije);
+ctx.font = "bold 26px 'Segoe UI', Roboto, sans-serif";
+
+let ceoTekst = ime + zvezde;
+let brojSlova = ceoTekst.length;
+let ugaoPoSlovu = (Math.PI * 2) / brojSlova;
+
+for (let i = 0; i < brojSlova; i++) {
+    ctx.save();
+    ctx.rotate(i * ugaoPoSlovu);
+    ctx.textAlign = "center";
+    
+    if (i < ime.length) {
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowColor = "rgba(0, 132, 255, 1)";
+        ctx.shadowBlur = 25;
+        ctx.fillText(ime[i], 0, -radius);
+    } else {
+        ctx.fillStyle = "#00d2ff";
+        ctx.shadowColor = "rgba(0, 80, 255, 1)";
+        ctx.shadowBlur = 30;
+        ctx.fillText(zvezde[i - ime.length], 0, -radius);
+    }
+    ctx.restore();
+}
+ctx.restore();
+}
+window.addEventListener('touchstart', function(e) {
+    if (e.touches && e.touches.length > 0) {
+        prstPritisnut = true;
+        poslednjiX = e.touches[0].clientX;
+        poslednjiY = e.touches[0].clientY;
+        
+        // Pokretanje zvuka direktno kroz čistu, tvoju originalnu touch strukturu
+        audioFajl.play().catch(err => console.log("Audio aktivacija...", err));
+        
+        psihodelicniTajmerBrzine = 0; 
+
+        let jacinaPritiska = e.touches[0].force || 0.6;
+        stvoriZelenoPrstanje(poslednjiX, poslednjiY, jacinaPritiska);
+        stvoriEksploziju(poslednjiX, poslednjiY);
+    }
+});
+
+window.addEventListener('touchmove', function(e) {
+    if (!prstPritisnut || !e.touches || e.touches.length === 0) return;
+    
+    // POPRAVLJENO: Vraćena 100% čista tvoja struktura bez nepostojećih i zalutalih promenljivih
+    let trenutniX = e.touches[0].clientX;
+    let trenutniY = e.touches[0].clientY;
+
+    poslednjiX = trenutniX;
+    poslednjiY = trenutniY; 
+    
+    jacinaPritiskaGlobalna = e.touches[0].force || 0.5;
+    if (Math.random() < 0.4) {
+        stvoriZelenoPrstanje(poslednjiX, poslednjiY, jacinaPritiskaGlobalna * 0.8);
+    }
+});
+
+window.addEventListener('touchend', function() {
+    prstPritisnut = false;
+    tajmerZaFiziku = -100; 
+    audioFajl.pause(); // Muzika staje odmah čim podigneš prst
+    
+    spektarPrstenaHue = 120;
+    spektarCesticaHueOffset = 0;
+    stroboskopAktivanTriger = false;
+    psihodelicniTajmerBrzine = 0;
+});
+
+function pokreniSvemir() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    zeleniCtx.clearRect(0, 0, zeleniCanvas.width, zeleniCanvas.height);
+    
+    warpCtx.fillStyle = 'rgba(1, 1, 4, 0.2)';
+    warpCtx.fillRect(0, 0, warpCanvas.width, warpCanvas.height);
+    
+    let cx = window.innerWidth / 2;
+    let cy = window.innerHeight / 2;
+
+    if (prstPritisnut) {
+        // CIKLUS BOJA: Šeta do plave (220) i nasumično bira sledeći ton za povratak nazad
+        spektarPrstenaHue += 8.0 * smerPrstena;
+        if (spektarPrstenaHue > 220 || spektarPrstenaHue < 95) {
+            smerPrstena *= -1;
+            if (spektarPrstenaHue >= 220) {
+                spektarPrstenaHue = Math.floor(Math.random() * 40) + 160; 
+            }
+        }
+
+        spektarCesticaHueOffset += 4.0 * smerCestica;
+        if (spektarCesticaHueOffset > 45 || spektarCesticaHueOffset < -25) {
+            smerCestica *= -1;
+        }
+
+        psihodelicniTajmerBrzine += 0.015; 
+
+        tajmerZaStroboskop++;
+        if (tajmerZaStroboskop >= vremeDoStroboskopa) {
+            stroboskopAktivanTriger = true;
+            tajmerZaStroboskop = 0;
+            vremeDoStroboskopa = Math.floor(Math.random() * 180) + 300; 
+        }
+
+        if (Math.random() < 0.6) {
+            stvoriZelenoPrstanje(poslednjiX, poslednjiY, jacinaPritiskaGlobalna * 0.7);
+        }
+    }
+    
+    for (let i = 0; i < maxWarpZvezda; i++) {
+        let zvezda = warpZvezde[i];
+        zvezda.z -= 18;
+        
+        if (zvezda.z <= 0) {
+            zvezda.z = window.innerWidth;
+            zvezda.x = (Math.random() - 0.5) * window.innerWidth;
+            zvezda.y = (Math.random() - 0.5) * window.innerHeight;
+        }
+        
+        let k = 400 / zvezda.z;
+        let px = zvezda.x * k + cx;
+        let py = zvezda.y * k + cy;
+        
+        if (px >= 0 && px <= window.innerWidth && py >= 0 && py <= window.innerHeight) {
+            let velicina = (1 - zvezda.z / window.innerWidth) * 4;
+            let stariK = 400 / (zvezda.z + 25);
+            let spx = zvezda.x * stariK + cx;
+            let spy = zvezda.y * stariK + cy;
+            
+            warpCtx.beginPath();
+            warpCtx.moveTo(px, py);
+            warpCtx.lineTo(spx, spy);
+            warpCtx.strokeStyle = zvezda.boja;
+            warpCtx.lineWidth = velicina;
+            warpCtx.stroke();
+        }
+    }
+
+    for (let i = zeleniBleskovi.length - 1; i >= 0; i--) {
+        let zb = zeleniBleskovi[i];
+        zb.r += 6; zb.alfa -= 0.05;
+        if (zb.alfa <= 0) { zeleniBleskovi.splice(i, 1); continue; }
+        zeleniCtx.beginPath();
+        zeleniCtx.arc(zb.x, zb.y, zb.r, 0, Math.PI * 2);
+        
+        if (prstPritisnut) {
+            if (stroboskopAktivanTriger) {
+                zeleniCtx.fillStyle = `hsla(0, 0%, 100%, ${zb.alfa * 0.95})`;
+            } else {
+                zeleniCtx.fillStyle = `hsla(${spektarPrstenaHue}, 100%, 50%, ${zb.alfa * 0.5})`;
+            }
+        } else {
+            zeleniCtx.fillStyle = `hsla(120, 100%, 50%, ${zb.alfa * 0.5})`;
+        }
+        zeleniCtx.fill();
+    }
+
+    if (stroboskopAktivanTriger) stroboskopAktivanTriger = false;
+
+    for (let i = zeleneCestice.length - 1; i >= 0; i--) {
+        let zc = zeleneCestice[i];
+        zc.x += zc.vx; zc.y += zc.vy;
+        zc.vx *= 0.94; zc.vy *= 0.94;
+        zc.alfa -= zc.slabljenje;
+        if (zc.alfa <= 0) { zeleneCestice.splice(i, 1); continue; }
+        zeleniCtx.save();
+        zeleniCtx.globalAlpha = zc.alfa;
+        zeleniCtx.beginPath();
+        zeleniCtx.arc(zc.x, zc.y, zc.velicina, 0, Math.PI * 2);
+        zeleniCtx.fillStyle = zc.boja;
+        zeleniCtx.shadowBlur = 18;
+        zeleniCtx.shadowColor = zc.boja;
+        zeleniCtx.fill();
+        zeleniCtx.restore();
+    }
+
+    for (let i = bleskovi.length - 1; i >= 0; i--) {
+        let b = bleskovi[i];
+        b.r += 4; b.alfa -= 0.07;
+        if (b.alfa <= 0) { bleskovi.splice(i, 1); continue; }
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(0, 0%, 100%, ${b.alfa})`;
+        ctx.fill();
+    }
+
+    for (let i = cestice.length - 1; i >= 0; i--) {
+        let c = cestice[i];
+        c.x += c.vx; c.y += c.vy;
+        c.vx *= 0.97; c.vy *= 0.97;
+        c.alfa -= c.slabljenje;
+        if (c.alfa <= 0) { cestice.splice(i, 1); continue; }
+        ctx.save();
+        ctx.globalAlpha = c.alfa;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, c.velicina, 0, Math.PI * 2);
+        ctx.fillStyle = c.boja;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = c.boja;
+        ctx.fill();
+        ctx.restore();
+    }
+
+    if (!prstPritisnut && Math.random() < 0.05) {
+        stvoriEksploziju();
+    }
+
+    tajmerZaFiziku++;
+    if (tajmerZaFiziku > vremeDoPromene) {
+        ciljnaBrzinaRotacije = (Math.random() * 0.9 + 0.5) * (Math.random() > 0.5 ? 1 : -1);
+        ciljniZoom = Math.random() * 0.5 + 0.75;
+        tajmerZaFiziku = 0;
+        vremeDoPromene = Math.random() * 40 + 30;
+    }
+
+    if (!prstPritisnut) {
+        trenutnaBrzinaRotacije += (ciljnaBrzinaRotacije - trenutnaBrzinaRotacije) * 0.04;
+        rotacija += trenutnaBrzinaRotacije * 0.15;
+        trenutniZoom += (ciljniZoom - trenutniZoom) * 0.04;
+    } else {
+        let sinusniFaktor = 0.04 + Math.sin(psihodelicniTajmerBrzine) * 0.03;
+
+        trenutnaBrzinaRotacije += (ciljnaBrzinaRotacije - trenutnaBrzinaRotacije) * sinusniFaktor;
+        rotacija += trenutnaBrzinaRotacije * (sinusniFaktor * 4.5); 
+        trenutniZoom += (ciljniZoom - trenutniZoom) * sinusniFaktor;
+    }
+
+    crtajKruzniTekst(window.innerWidth / 2, window.innerHeight / 2, 110, tekstIme, tekstZvezde, rotacija, trenutniZoom);
+    requestAnimationFrame(pokreniSvemir);
+}
+
+pokreniSvemir();
+</script>
+</body>
+</html>
+ trenutnaBrzinaRotacije * (sinusniFaktor * 4.5); 
+        trenutniZoom += (ciljniZoom - trenutniZoom) * sinusniFaktor;
+    }
+
+    crtajKruzniTekst(window.innerWidth / 2, window.innerHeight / 2, 110, tekstIme, tekstZvezde, rotacija, trenutniZoom);
+    requestAnimationFrame(pokreniSvemir);
+}
+
+pokreniSvemir();
+</script>
+</body>
+</html>
